@@ -25,16 +25,20 @@ local sel_show = function(sel)
 end
 
 -- Save the current selection in hist while being in visual mode.
--- This function does nothing if not in visual mode.
+-- This function does nothing if not in visual mode, and
+-- record occurs only if we are not already browsing.
 -- return True if something was saved, false otherwise
-M.save_current_if_visual = function()
+M.save_current_visual = function()
+	if hist:ongonig_browse() then
+		return false
+	end
 	local mode = vim.fn.mode()
 	local sel_mode = mode:match("^[vV\x16]$")
 	if not sel_mode then
 		return false
 	end
-	local beg_sel = vim.fn.getpos(".")
-	local end_sel = vim.fn.getpos("v")
+	local beg_sel = vim.fn.getpos("v")
+	local end_sel = vim.fn.getpos(".")
 
 	local new = {
 		mode = sel_mode,
@@ -43,12 +47,20 @@ M.save_current_if_visual = function()
 		end_lin = end_sel[2],
 		end_col = end_sel[3],
 	}
+	local last = hist:peek_last()
+	if last and sel_eql(last, new) then
+		print("no manual save cause last==new")
+		return false
+	end
 	hist:push(new)
 	print("manual store hist @ ", hist.id_last_saved)
 	return true
 end
 
 M.sel_prev = function()
+	if M.save_current_visual() then
+		hist:get_prev()
+	end
 	local last = hist:get_prev()
 	if not last then
 		print("no selection history")
@@ -58,9 +70,7 @@ M.sel_prev = function()
 end
 
 M.sel_next = function()
-	-- if hist:has_new() then
-	-- 	M.save_current_if_visual()
-	-- end
+	M.save_current_visual()
 	local next = hist:get_next()
 	if not next then
 		print("no selection history")
@@ -73,14 +83,7 @@ M.setup = function(user_options)
 	-- TODO : change to reasonnable mappings
 	vim.keymap.set({ "v", "n" }, "<c-p>", M.sel_prev)
 	vim.keymap.set({ "v", "n" }, "<c-n>", M.sel_next)
-	-- vim.keymap.set({ "v" }, "<c-s>", M.save_current_if_visual)
-
-	-- other get sel approach
-	-- v is where cursor goes when doing `o` in visual, . is where it is now.
-	-- this is updated directly, not only when leaving the visual mode like '< '>
-	--function get_visual_selection()
-	-- return table.concat(vim.fn.getregion(vim.fn.getpos("v"), vim.fn.getpos(".")), "\n")
-	-- end
+	-- vim.keymap.set({ "v" }, "<c-s>", M.save_current_visual)
 
 	-- When leaving Visual mode, save the selection
 	vim.api.nvim_create_autocmd("ModeChanged", {
@@ -132,7 +135,7 @@ M.setup = function(user_options)
 	end, { nargs = 1 })
 
 	vim.api.nvim_create_user_command("GvhistShow", function()
-		vim.print(vim.inspect(hist))
+		vim.print(vim.inspect(hist.data))
 	end, {})
 end
 
