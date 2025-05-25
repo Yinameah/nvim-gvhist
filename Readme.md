@@ -12,6 +12,8 @@ Recently, I've been working from nvim with repl in jupyter style extensively, an
 
 Did not find anything useful on the topic, so wrote this small plugin.
 
+![screencast](demo.gif)
+
 # How
 
 ## Installation
