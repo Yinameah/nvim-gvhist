@@ -63,11 +63,11 @@ M.save_current_visual = function()
 
 	local last = current_hist:peek_last()
 	if last and sel_eql(last, new) then
-		print("no manual save cause last==new")
+		-- print("no manual save cause last==new")
 		return true
 	end
 	current_hist:push(new)
-	print("manual store hist @ ", current_hist.id_last_saved)
+	-- print("manual store hist @ ", current_hist.id_last_saved)
 	return true
 end
 
@@ -77,7 +77,7 @@ M.sel_prev = function()
 	end
 	local last = current_hist:get_prev()
 	if not last then
-		print("no selection history")
+		-- print("no selection history")
 		return
 	end
 	sel_show(last)
@@ -87,7 +87,7 @@ M.sel_next = function()
 	M.save_current_visual()
 	local next = current_hist:get_next()
 	if not next then
-		print("no selection history")
+		-- print("no selection history")
 		return
 	end
 	sel_show(next)
@@ -139,11 +139,11 @@ M.setup = function(user_options)
 			-- avoid saving last sel many times in a row
 			local last = current_hist:peek_last()
 			if last and sel_eql(last, new) then
-				print("nosave cause last==new")
+				-- print("nosave cause last==new")
 				return
 			end
 			current_hist:push(new)
-			print("store hist @ ", current_hist.id_last_saved, "mode switch was ", ev.match)
+			-- print("store hist @ ", current_hist.id_last_saved, "mode switch was ", ev.match)
 		end,
 	})
 
