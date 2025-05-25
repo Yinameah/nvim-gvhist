@@ -28,7 +28,7 @@ end
 -- Save the current selection in hist while being in visual mode.
 -- This function does nothing if not in visual mode, and
 -- record occurs only if we are not already browsing.
--- return True if something was saved, false otherwise
+-- returns True if last stored item equals current selection
 M.save_current_visual = function()
 	if current_hist:ongonig_browse() then
 		return false
@@ -41,17 +41,30 @@ M.save_current_visual = function()
 	local beg_sel = vim.fn.getpos("v")
 	local end_sel = vim.fn.getpos(".")
 
-	local new = {
-		mode = sel_mode,
-		beg_lin = beg_sel[2],
-		beg_col = beg_sel[3],
-		end_lin = end_sel[2],
-		end_col = end_sel[3],
-	}
+	-- Save line-V as '< / '> would
+	local new
+	if sel_mode == "V" then
+		new = {
+			mode = sel_mode,
+			beg_lin = beg_sel[2],
+			beg_col = 1,
+			end_lin = end_sel[2],
+			end_col = 2147483647,
+		}
+	else
+		new = {
+			mode = sel_mode,
+			beg_lin = beg_sel[2],
+			beg_col = beg_sel[3],
+			end_lin = end_sel[2],
+			end_col = end_sel[3],
+		}
+	end
+
 	local last = current_hist:peek_last()
 	if last and sel_eql(last, new) then
 		print("no manual save cause last==new")
-		return false
+		return true
 	end
 	current_hist:push(new)
 	print("manual store hist @ ", current_hist.id_last_saved)
