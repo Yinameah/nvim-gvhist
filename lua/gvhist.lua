@@ -4,6 +4,7 @@ local M = {}
 local last_save_id = 0
 -- Store index to current shown previous sel
 local last_shown_id = 0
+local last_shown = nil
 -- Avoid temporary mode switch to trigger selection storage
 local store = true
 
@@ -15,11 +16,25 @@ local hist = {}
 
 -- TODO : I will rely on gv not being re-mapped in visual, mention in the docs
 
+local sel_eql = function(sel1, sel2)
+	local dupe = true
+	for k, v in pairs(sel1) do
+		if sel2[k] ~= v then
+			dupe = false
+			break
+		end
+	end
+	return dupe
+end
+
 local sel_show = function(sel)
-	store = false
 	vim.fn.setpos("'<", { 0, sel.beg_lin, sel.beg_col, 0 })
 	vim.fn.setpos("'>", { 0, sel.end_lin, sel.end_col, 0 })
-	vim.api.nvim_feedkeys("gv", "n", false)
+	vim.api.nvim_feedkeys("gv", "x", false)
+	if vim.fn.mode() ~= sel.mode then
+		vim.api.nvim_feedkeys(sel.mode, "x", false)
+	end
+	last_shown = sel
 end
 
 M.sel_prev = function()
@@ -71,11 +86,9 @@ M.sel_next = function()
 end
 
 M.setup = function(user_options)
+	-- TODO : change to reasonnable mappings
 	vim.keymap.set({ "v", "n" }, "<c-p>", M.sel_prev)
 	vim.keymap.set({ "v", "n" }, "<c-n>", M.sel_next)
-	vim.keymap.set({ "v", "n" }, "<c-a>", function()
-		vim.fn.setpos("'<", { 0, 1, 1, 0 })
-	end)
 
 	-- other get sel approach
 	-- v is where cursor goes when doing `o` in visual, . is where it is now.
@@ -88,48 +101,37 @@ M.setup = function(user_options)
 	vim.api.nvim_create_autocmd("ModeChanged", {
 		pattern = { "[vV\x16]*:*" },
 		callback = function(ev)
-			if not store then
-				-- Prevent to store when applying the selection
-				-- FIXME : this should be more clever.
-				-- Should store the selection that is restored, and
-				-- if the selection changed compared to restoration...
-				-- Let me think about this :
-				-- when I circle around the history :
-				-- 1) exit visual
-				-- 2) replace <> marks
-				-- 3) enter visual again
-
-				store = true
-				return
-			else
-				-- Quit visual and store : end of showing circle
-				last_shown_id = 0
-			end
 			-- NOTE : getpos returns
 			-- [bufnum, lnum, col, off]
 			-- "lnum" and "col" are the position in the buffer.  The first column is 1.
 			local beg_sel = vim.fn.getpos("'<")
 			local end_sel = vim.fn.getpos("'>")
 			-- NOTE : \x16 == <c-v>
-			local mode = ev.match:match("([vV\x16]):*")
+			local sel_mode = ev.match:match("([vV\x16]):*")
+			if not ev.match:match("[ni]$") then
+				return
+			end
+			-- left visual to normal or insert : breaks show selection circle
+			last_shown_id = 0
 
 			local new = {
-				mode = mode,
+				mode = sel_mode,
 				beg_lin = beg_sel[2],
 				beg_col = beg_sel[3],
 				end_lin = end_sel[2],
 				end_col = end_sel[3],
 			}
+			-- Don't save obvious duplicates
 			if last_save_id > 0 then
 				local last = hist[last_save_id]
-				local dupe = true
-				for k, v in pairs(new) do
-					if last[k] ~= v then
-						dupe = false
-						break
-					end
+				if sel_eql(last, new) then
+					print("nosave cause last==new")
+					return
 				end
-				if dupe then
+			end
+			if last_shown then
+				if sel_eql(last_shown, new) then
+					print("nosave cause last_shown==new")
 					return
 				end
 			end
@@ -138,7 +140,7 @@ M.setup = function(user_options)
 				last_save_id = 1
 			end
 			hist[last_save_id] = new
-			print("store hist @ ", last_save_id)
+			print("store hist @ ", last_save_id, "mode switch was ", ev.match)
 		end,
 	})
 
