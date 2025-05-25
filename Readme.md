@@ -39,6 +39,7 @@ The plugin provides only two functions :
 - `require("gvhist").sel_next()` 
 
 By default, they are mapped to `<c-p>` & `<c-n>` in visual mode only, but you can disable this and map it the way you like.
+Note that the two functions works from normal mode as well, so one can basically remap `gv` to `sel_prev()`.
 
 The selection history is per window, but nothing special is done when the buffer is modified, which means the selection history will end up all over the place.
 `GvhistClear` user command is provided to delete the history in case of need.
