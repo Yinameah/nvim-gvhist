@@ -1,20 +1,8 @@
 local M = {}
 
--- Store index to last saved selection
-local last_save_id = 0
--- Store index to current shown previous sel
-local last_shown_id = 0
-local last_shown = nil
--- Avoid temporary mode switch to trigger selection storage
-local store = true
-
 -- TODO : make this an option
 local hist_max = 10
-
--- list storing previous selections. Acts as circular buffer (see hist_max)
-local hist = {}
-
--- TODO : I will rely on gv not being re-mapped in visual, mention in the docs
+local hist = require("gvhist.circular_buffer").new(hist_max)
 
 local sel_eql = function(sel1, sel2)
 	local dupe = true
@@ -34,22 +22,34 @@ local sel_show = function(sel)
 	if vim.fn.mode() ~= sel.mode then
 		vim.api.nvim_feedkeys(sel.mode, "x", false)
 	end
-	last_shown = sel
+end
+
+-- Save the current selection in hist while being in visual mode.
+-- This function does nothing if not in visual mode.
+-- return True if something was saved, false otherwise
+M.save_current_if_visual = function()
+	local mode = vim.fn.mode()
+	local sel_mode = mode:match("^[vV\x16]$")
+	if not sel_mode then
+		return false
+	end
+	local beg_sel = vim.fn.getpos(".")
+	local end_sel = vim.fn.getpos("v")
+
+	local new = {
+		mode = sel_mode,
+		beg_lin = beg_sel[2],
+		beg_col = beg_sel[3],
+		end_lin = end_sel[2],
+		end_col = end_sel[3],
+	}
+	hist:push(new)
+	print("manual store hist @ ", hist.id_last_saved)
+	return true
 end
 
 M.sel_prev = function()
-	if last_shown_id == 0 then
-		-- new show selection circle, start at last save
-		last_shown_id = last_save_id
-	else
-		-- currently circling selections, go one before
-		last_shown_id = last_shown_id - 1
-		-- If reaching end of buffer, circle
-		if last_shown_id < 1 then
-			last_shown_id = #hist
-		end
-	end
-	local last = hist[last_shown_id]
+	local last = hist:get_prev()
 	if not last then
 		print("no selection history")
 		return
@@ -58,26 +58,10 @@ M.sel_prev = function()
 end
 
 M.sel_next = function()
-	if last_shown_id == 0 then
-		-- new show selection circle, start at oldest save, accounting for wrapping
-		if last_save_id < #hist then
-			if last_save_id == 1 then
-				last_shown_id = #hist
-			else
-				last_shown_id = last_save_id - 1
-			end
-		else
-			last_shown_id = 1
-		end
-	else
-		-- currently circling selections, go one after
-		last_shown_id = last_shown_id + 1
-		-- If reaching end of buffer, circle
-		if last_shown_id > #hist then
-			last_shown_id = 1
-		end
-	end
-	local next = hist[last_shown_id]
+	-- if hist:has_new() then
+	-- 	M.save_current_if_visual()
+	-- end
+	local next = hist:get_next()
 	if not next then
 		print("no selection history")
 		return
@@ -89,6 +73,7 @@ M.setup = function(user_options)
 	-- TODO : change to reasonnable mappings
 	vim.keymap.set({ "v", "n" }, "<c-p>", M.sel_prev)
 	vim.keymap.set({ "v", "n" }, "<c-n>", M.sel_next)
+	-- vim.keymap.set({ "v" }, "<c-s>", M.save_current_if_visual)
 
 	-- other get sel approach
 	-- v is where cursor goes when doing `o` in visual, . is where it is now.
@@ -112,7 +97,7 @@ M.setup = function(user_options)
 				return
 			end
 			-- left visual to normal or insert : breaks show selection circle
-			last_shown_id = 0
+			hist:reset_show()
 
 			local new = {
 				mode = sel_mode,
@@ -121,26 +106,14 @@ M.setup = function(user_options)
 				end_lin = end_sel[2],
 				end_col = end_sel[3],
 			}
-			-- Don't save obvious duplicates
-			if last_save_id > 0 then
-				local last = hist[last_save_id]
-				if sel_eql(last, new) then
-					print("nosave cause last==new")
-					return
-				end
+			-- avoid saving last sel many times in a row
+			local last = hist:peek_last()
+			if last and sel_eql(last, new) then
+				print("nosave cause last==new")
+				return
 			end
-			if last_shown then
-				if sel_eql(last_shown, new) then
-					print("nosave cause last_shown==new")
-					return
-				end
-			end
-			last_save_id = last_save_id + 1
-			if last_save_id > hist_max then
-				last_save_id = 1
-			end
-			hist[last_save_id] = new
-			print("store hist @ ", last_save_id, "mode switch was ", ev.match)
+			hist:push(new)
+			print("store hist @ ", hist.id_last_saved, "mode switch was ", ev.match)
 		end,
 	})
 
