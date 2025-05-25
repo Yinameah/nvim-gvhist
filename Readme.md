@@ -20,10 +20,23 @@ With lazy.nvim :
 ```lua
 return {
     "Yinameah/nvim-gvhist",
-    opts = { hist_max },
+    opts = {
+	-- Max number of selection to remember
+	-- This is a per window number
+	hist_max = 100,
+	-- If set to false, no mapping will be set.
+	default_mapping = true,
+    },
 },
 ```
 
 ## Usage
 
+The plugin provides only two functions :
+- `require("gvhist").sel_prev()` 
+- `require("gvhist").sel_next()` 
 
+By default, they are mapped to `<c-p>` & `<c-n>` in visual mode only, but you can disable this and map it the way you like.
+
+The selection history is per window, but nothing special is done when the buffer is modified, which means the selection history will end up all over the place.
+`GvhistClear` user command is provided to delete the history in case of need.

@@ -76,4 +76,10 @@ function M:get_next()
 	return self.data[self.id_last_shown]
 end
 
+function M:clear()
+	self.data = {}
+	self.id_last_saved = 0
+	self.id_last_shown = 0
+end
+
 return M

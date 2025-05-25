@@ -1,8 +1,9 @@
 local M = {}
 
--- TODO : make this an option
-local hist_max = 10
-local hist = require("gvhist.circular_buffer").new(hist_max)
+local opts
+
+local hist_win_map = {}
+local current_hist = {}
 
 local sel_eql = function(sel1, sel2)
 	local dupe = true
@@ -29,7 +30,7 @@ end
 -- record occurs only if we are not already browsing.
 -- return True if something was saved, false otherwise
 M.save_current_visual = function()
-	if hist:ongonig_browse() then
+	if current_hist:ongonig_browse() then
 		return false
 	end
 	local mode = vim.fn.mode()
@@ -47,21 +48,21 @@ M.save_current_visual = function()
 		end_lin = end_sel[2],
 		end_col = end_sel[3],
 	}
-	local last = hist:peek_last()
+	local last = current_hist:peek_last()
 	if last and sel_eql(last, new) then
 		print("no manual save cause last==new")
 		return false
 	end
-	hist:push(new)
-	print("manual store hist @ ", hist.id_last_saved)
+	current_hist:push(new)
+	print("manual store hist @ ", current_hist.id_last_saved)
 	return true
 end
 
 M.sel_prev = function()
 	if M.save_current_visual() then
-		hist:get_prev()
+		current_hist:get_prev()
 	end
-	local last = hist:get_prev()
+	local last = current_hist:get_prev()
 	if not last then
 		print("no selection history")
 		return
@@ -71,7 +72,7 @@ end
 
 M.sel_next = function()
 	M.save_current_visual()
-	local next = hist:get_next()
+	local next = current_hist:get_next()
 	if not next then
 		print("no selection history")
 		return
@@ -80,10 +81,23 @@ M.sel_next = function()
 end
 
 M.setup = function(user_options)
-	-- TODO : change to reasonnable mappings
-	vim.keymap.set({ "v", "n" }, "<c-p>", M.sel_prev)
-	vim.keymap.set({ "v", "n" }, "<c-n>", M.sel_next)
-	-- vim.keymap.set({ "v" }, "<c-s>", M.save_current_visual)
+	opts = vim.tbl_deep_extend("force", require("gvhist.config"), user_options or {})
+
+	-- WinEnter is not triggered for the first window, but it always has id 1000,
+	hist_win_map[1000] = require("gvhist.circular_buffer").new(opts.hist_max)
+	current_hist = hist_win_map[1000]
+
+	-- Each window has his own history, and we just swap the current one on WinEnter
+	vim.api.nvim_create_autocmd("WinEnter", {
+		callback = function(ev)
+			local winid = vim.api.nvim_get_current_win()
+			current_hist = hist_win_map[winid]
+			if current_hist == nil then
+				hist_win_map[winid] = require("gvhist.circular_buffer").new(opts.hist_max)
+				current_hist = hist_win_map[winid]
+			end
+		end,
+	})
 
 	-- When leaving Visual mode, save the selection
 	vim.api.nvim_create_autocmd("ModeChanged", {
@@ -100,7 +114,7 @@ M.setup = function(user_options)
 				return
 			end
 			-- left visual to normal or insert : breaks show selection circle
-			hist:reset_show()
+			current_hist:reset_show()
 
 			local new = {
 				mode = sel_mode,
@@ -110,33 +124,32 @@ M.setup = function(user_options)
 				end_col = end_sel[3],
 			}
 			-- avoid saving last sel many times in a row
-			local last = hist:peek_last()
+			local last = current_hist:peek_last()
 			if last and sel_eql(last, new) then
 				print("nosave cause last==new")
 				return
 			end
-			hist:push(new)
-			print("store hist @ ", hist.id_last_saved, "mode switch was ", ev.match)
+			current_hist:push(new)
+			print("store hist @ ", current_hist.id_last_saved, "mode switch was ", ev.match)
 		end,
 	})
 
-	vim.api.nvim_create_user_command("Gvhist", function(opts)
-		local n_hist = tonumber(opts.args)
-		if not n_hist then
-			print("Gvhist should be called with a number")
-			return
-		end
-
-		local i = math.floor(n_hist)
-		local sel = hist[i]
-		vim.fn.setpos("'<", { 0, sel.beg_lin, sel.beg_col, 0 })
-		vim.fn.setpos("'>", { 0, sel.end_lin, sel.end_col, 0 })
-		vim.cmd("normal! gv")
-	end, { nargs = 1 })
+	-- Commands
 
 	vim.api.nvim_create_user_command("GvhistShow", function()
-		vim.print(vim.inspect(hist.data))
-	end, {})
+		vim.print(vim.inspect(current_hist.data))
+	end, { desc = "Print current selection history for debug purposes" })
+
+	vim.api.nvim_create_user_command("GvhistClear", function()
+		current_hist:clear()
+	end, { desc = "erase the current window selection history" })
+
+	-- Mapping
+
+	if opts.default_mapping then
+		vim.keymap.set({ "v" }, "<c-p>", M.sel_prev)
+		vim.keymap.set({ "v" }, "<c-n>", M.sel_next)
+	end
 end
 
 return M
